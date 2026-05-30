@@ -109,8 +109,11 @@ if "assuntos_selecionados" not in st.session_state: st.session_state.assuntos_se
 if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos = 0
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
-# CONFIGURAÇÃO DA PLANILHA (Substitua pelo seu link real do Google Sheets)
+# CONFIGURAÇÃO DA PLANILHA (Coloque o link da sua planilha aqui)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
+
+# SEU E-MAIL DE RECEBIMENTO DOS COMPROVANTES
+EMAIL_DESTINO = "bibliokhancontato@gmail.com"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
@@ -124,7 +127,7 @@ with st.sidebar:
         st.error("💳 Sem créditos ativos")
 
 # ==========================================
-# 🌟 CRIAÇÃO DAS ABAS GLOBAIS (ESTRUTURA PRINCIPAL)
+# 🌟 CRIAÇÃO DAS ABAS GLOBAIS
 # ==========================================
 tab_gerador, tab_financeiro = st.tabs(["⚖️ Catalogação em Lote", "💳 Compra e Gestão de Créditos"])
 
@@ -132,7 +135,6 @@ tab_gerador, tab_financeiro = st.tabs(["⚖️ Catalogação em Lote", "💳 Com
 # ABA 1: GERADOR DE FICHAS (TRABALHO)
 # ---------------------------------------------------------
 with tab_gerador:
-    # Aviso de bloqueio se não houver créditos
     if st.session_state.creditos_ativos <= 0:
         st.warning("🔒 O painel de salvamento está bloqueado. Valide seu Token na aba 'Gestão de Créditos' para continuar.")
     
@@ -197,7 +199,6 @@ with tab_gerador:
 
         st.markdown("---")
         st.subheader("4. Pré-visualização")
-        # Lógica de montagem da ficha
         ent_p, resp, e_tit = formatar_entrada_e_corpo(tipo_a, aut_list, ent_n, tit, tem_org, org_n, t_org, tem_tr, tr_n)
         cut = calcular_cutter(tipo_a, aut_list, ent_n, tit, tem_org, org_n)
         d_fis = f"1 recurso online ({pag} f.) " if sup == "Digital" else f"{pag} f"
@@ -208,7 +209,6 @@ with tab_gerador:
         f_txt = f"{classif}\n{cut}   {ent_p if not e_tit else tit.strip()}\n            {tit.strip() if not e_tit else ''} / {resp}. – {ed} – {pub}\n            {d_fis}.\n\n            {ass_s}{rast}"
         st.text_area("Ficha AACR2", value=f_txt, height=200)
         
-        # BOTÃO DE SALVAMENTO (BLOQUEADO POR CRÉDITO)
         btn_lock = st.session_state.creditos_ativos <= 0
         if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=btn_lock):
             if tit.strip():
@@ -219,63 +219,83 @@ with tab_gerador:
             else: st.error("Preencha o título.")
 
 # ---------------------------------------------------------
-# ABA 2: FINANCEIRO E CRÉDITOS (GESTÃO)
+# ABA 2: FINANCEIRO E CRÉDITOS (COM DISPARO DE E-MAIL)
 # ---------------------------------------------------------
 with tab_financeiro:
     st.header("💳 Gestão Financeira e Saldo")
-    
     col_f1, col_f2 = st.columns(2)
     
     with col_f1:
         st.subheader("🔓 Validar Acesso")
-        tk_in = st.text_input("Insira seu Token (E-mail ou Nome)", type="password")
+        tk_in = st.text_input("Insira seu Token (E-mail de Cadastro)", type="password")
         if st.button("Ativar Sistema"):
             try:
-                # Trata a URL de forma robusta, independentemente do final (?usp=drivesdk, /edit, etc.)
-                base_url = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk".split("/edit")[0]
+                base_url = URL_PLANILHA.split("/edit")[0]
                 url_csv = f"{base_url}/gviz/tq?tqx=out:csv"
-                
-                # Lê a planilha usando o Pandas
                 df = pd.read_csv(url_csv)
-                
-                # Força os cabeçalhos para letras minúsculas para evitar erros de digitação na planilha
                 df.columns = df.columns.str.strip().str.lower()
-                
                 tk_c = tk_in.strip().upper()
                 
                 if 'token' in df.columns and 'creditos' in df.columns:
-                    # Converte a coluna token para maiúsculas para cruzar os dados corretamente
                     df['token'] = df['token'].astype(str).str.strip().str.upper()
-                    
                     if tk_c in df['token'].values:
                         st.session_state.creditos_ativos = int(df.loc[df['token'] == tk_c, 'creditos'].values[0])
                         st.session_state.token_atual = tk_c
                         st.success(f"Token Ativo! Saldo: {st.session_state.creditos_ativos}")
                         st.rerun()
-                    else:
-                        st.error("Token não localizado na planilha. Verifique se digitou corretamente.")
-                else:
-                    st.error("Erro de estrutura: A planilha precisa ter as colunas 'token' e 'creditos' na primeira linha.")
-            except Exception as e:
-                st.error("Erro ao conectar à planilha. Verifique o link ou se ela está configurada como 'Qualquer pessoa com o link'.")
+                    else: st.error("E-mail/Token não cadastrado na planilha.")
+                else: st.error("Planilha desalinhada. Use as colunas 'token' e 'creditos'.")
+            except: st.error("Erro ao conectar à planilha. Verifique o compartilhamento público.")
 
     with col_f2:
         st.subheader("🛒 Tabela de Preços")
         st.markdown("""
-        * **30 Fichas** — R$ 49,00
-        * **60 Fichas** — R$ 89,00 
-        * **100 Fichas** — **R$ 129,00 [RECOMENDADO]**
-        * **300 Fichas** — R$ 299,00
+        * **30 Fichas** — R$ 49,00 *(R$ 1,63/un)*
+        * **60 Fichas** — R$ 89,00 ⚡ *Economize R$ 9!*
+        * **100 Fichas** — **R$ 129,00 [O DOBRO POR +R$40]**
+        * **300 Fichas** — **R$ 299,00 [FICHA POR R$ 0,99]**
+        * **500 Fichas** — R$ 449,00 *(R$ 0,89/un)*
         """)
         st.info("🔑 **PIX:** `bibliokhancontato@gmail.com`")
 
     st.markdown("---")
     st.subheader("📩 Envio de Comprovante")
+    
+    # FORMULÁRIO COM ENVIO REAL POR E-MAIL VIA FORMSUBMIT
     with st.form("pix_form"):
-        n_c = st.text_input("Nome Completo")
-        e_c = st.text_input("E-mail")
-        arq = st.file_uploader("Anexe o comprovante", type=["jpg", "png", "pdf"])
+        nome_cliente = st.text_input("Nome Completo")
+        email_cliente = st.text_input("E-mail de Cadastro no Sistema")
+        comprovante = st.file_uploader("Anexe a imagem ou PDF do comprovante do PIX", type=["jpg", "png", "jpeg", "pdf"])
+        
         if st.form_submit_button("Enviar para Restauração de Saldo"):
-            if n_c and arq:
-                st.success("Enviado! Em breve Sabrina atualizará seu saldo na planilha e você receberá um aviso.")
-            else: st.error("Preencha os campos obrigatórios.")
+            if nome_cliente.strip() and email_cliente.strip() and comprovante is not None:
+                with st.spinner("Enviando comprovante... Por favor, aguarde."):
+                    try:
+                        # Prepara a requisição HTTP multipart para o FormSubmit enviar o arquivo anexado
+                        url_formsubmit = f"https://formsubmit.co/ajax/{EMAIL_DESTINO}"
+                        
+                        # Passa os dados do texto do formulário
+                        dados_texto = {
+                            "Nome do Cliente": nome_cliente,
+                            "E-mail de Cadastro": email_cliente,
+                            "_subject": f"🔥 NOVO COMPROVANTE: {nome_cliente}",
+                            "_captcha": "false" # Desativa o captcha pro Streamlit conseguir enviar direto
+                        }
+                        
+                        # Passa o arquivo carregado na memória do Streamlit
+                        arquivos = {
+                            "Attachment": (comprovante.name, comprovante.getvalue(), comprovante.type)
+                        }
+                        
+                        # Dispara o envio
+                        resposta = requests.post(url_formsubmit, data=dados_texto, files=arquivos)
+                        
+                        if resposta.status_code == 200:
+                            st.success("✅ Comprovante enviado com sucesso para a nossa equipe!")
+                            st.info("⏳ Agora você já pode aguardar. Assim que validarmos o PIX, o seu saldo será atualizado na planilha.")
+                        else:
+                            st.error("O servidor de e-mail recusou o envio. Tente novamente mais tarde.")
+                    except Exception as e:
+                        st.error("Erro interno ao tentar despachar o e-mail. Verifique sua conexão.")
+            else:
+                st.error("❌ Por favor, preencha todos os campos e anexe o arquivo do comprovante.")
