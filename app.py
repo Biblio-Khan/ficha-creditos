@@ -113,7 +113,7 @@ if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
 # 🌟 ATUALIZADO: SEU TOKEN MASCARADO DO FORMSUBMIT
-EMAIL_DESTINO = "9d3ad159dbbf47082b413743bcff6d61"
+EMAIL_DESTINO = "bibliokhancontato@gmail.com"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
