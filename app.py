@@ -232,7 +232,7 @@ with tab_financeiro:
         if st.button("Ativar Sistema"):
             try:
                 # Trata a URL de forma robusta, independentemente do final (?usp=drivesdk, /edit, etc.)
-                base_url = https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk.split("/edit")[0]
+                base_url = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk".split("/edit")[0]
                 url_csv = f"{base_url}/gviz/tq?tqx=out:csv"
                 
                 # Lê a planilha usando o Pandas
