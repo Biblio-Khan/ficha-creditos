@@ -8,21 +8,31 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(
-    page_title="Gerador de Fichas Jurídicas - VCB Senado",
+    page_title="BiblioKhan - Sistema de Catalogação",
     page_icon="⚖️",
     layout="wide"
 )
 
-# Força fonte monoespaçada na visualização da ficha dentro do navegador
+# Estilização para manter a identidade visual roxa e fontes profissionais
 st.markdown("""
     <style>
-    textarea {
-        font-family: 'Courier New', Courier, monospace !important;
+    textarea { font-family: 'Courier New', Courier, monospace !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 50px; 
+        white-space: pre-wrap; 
+        background-color: #f0f2f6; 
+        border-radius: 5px 5px 0px 0px; 
+        gap: 1px; 
+        padding-top: 10px; 
+        padding-bottom: 10px; 
     }
+    .stTabs [aria-selected="true"] { background-color: #B19FFB !important; color: black !important; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNÇÃO DE CONEXÃO E TRATAMENTO DA API DO SENADO ---
+# --- FUNÇÕES DE SUPORTE (API, DOCX E REGRAS AACR2) ---
+
 def buscar_vcb_senado(termo_busca):
     url_api = "https://adm.senado.leg.br/vcb/vocab/services.php"
     params = {"task": "search", "arg": termo_busca, "output": "json"}
@@ -37,15 +47,12 @@ def buscar_vcb_senado(termo_busca):
                     if isinstance(item, dict) and "string" in item:
                         resultados_formatados.append({
                             "termo": item["string"].strip(),
-                            "id": f"VCB-{item.get('term_id', chave)}",
-                            "nota": "Termo oficial homologado pelo Vocabulário Controlado do Senado Federal."
+                            "id": f"VCB-{item.get('term_id', chave)}"
                         })
             return resultados_formatados
-    except Exception:
-        return []
+    except Exception: return []
     return []
 
-# --- FUNÇÃO PARA GERAR O ARQUIVO DO WORD (.DOCX) ---
 def gerar_docx_lote(lista_fichas):
     doc = Document()
     style = doc.styles['Normal']
@@ -53,368 +60,205 @@ def gerar_docx_lote(lista_fichas):
     font.name = 'Courier New'
     font.size = Pt(10)
     for idx, ficha_texto in enumerate(lista_fichas):
-        if idx > 0:
-            doc.add_page_break()
+        if idx > 0: doc.add_page_break()
         p = doc.add_paragraph(ficha_texto)
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        doc.add_paragraph("\n" + "-"*50 + "\n")
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
-# --- REGRAS DE ENTRADA CATALOGRÁFICA (AACR2/RDA) ---
 def formatar_entrada_e_corpo(tipo_autor, autores_lista, entity, titulo, tem_organizador, organizador_nome, tipo_org, tem_tradutor, tradutor_nome):
-    entrada = ""
-    corpo_autores = ""
-    entrada_por_titulo = False
-    
+    entrada, corpo_autores, entrada_por_titulo = "", "", False
     if tem_organizador and tipo_autor == "Pessoa Física" and not any(a.strip() for a in autores_lista):
-        entrada_por_titulo = True
-        entrada = ""
-        corpo_autores = f"{tipo_org} por {organizador_nome.strip()}"
+        entrada_por_titulo, corpo_autores = True, f"{tipo_org} por {organizador_nome.strip()}"
     elif tipo_autor == "Entidade (Órgão/Instituição)":
-        entrada = entity.strip().upper()
-        corpo_autores = ""
+        entrada, corpo_autores = entity.strip().upper(), ""
     else:
         autores = [a.strip() for a in autores_lista if a.strip()]
-        qtd = len(autores)
-        
-        if qtd == 1:
+        if len(autores) == 1:
             partes = autores[0].split()
             entrada = f"{partes[-1].upper()}, {' '.join(partes[:-1])}." if len(partes) > 1 else f"{autores[0].upper()}."
             corpo_autores = autores[0]
-        elif qtd >= 2 and qtd <= 3:
+        elif 2 <= len(autores) <= 3:
             partes = autores[0].split()
             entrada = f"{partes[-1].upper()}, {' '.join(partes[:-1])}." if len(partes) > 1 else f"{autores[0].upper()}."
             corpo_autores = ", ".join(autores)
-        elif qtd >= 4:
-            entrada_por_titulo = True
-            entrada = ""  
-            corpo_autores = f"{autores[0]} [et al.]"
-            
-        if tem_organizador and organizador_nome.strip() and qtd < 4:
+        elif len(autores) >= 4:
+            entrada_por_titulo, corpo_autores = True, f"{autores[0]} [et al.]"
+        if tem_organizador and organizador_nome.strip() and len(autores) < 4:
             corpo_autores += f" ; {tipo_org} por {organizador_nome.strip()}"
-
     if tem_tradutor and tradutor_nome.strip():
-        if corpo_autores:
-            corpo_autores += f" ; tradução por {tradutor_nome.strip()}"
-        else:
-            corpo_autores = f"tradução por {tradutor_nome.strip()}"
-            
+        corpo_autores = (corpo_autores + f" ; tradução por {tradutor_nome.strip()}") if corpo_autores else f"tradução por {tradutor_nome.strip()}"
     return entrada, corpo_autores, entrada_por_titulo
 
 def calcular_cutter(tipo_autor, autores_lista, entidade, titulo, tem_organizador, organizador_nome):
-    referencia = ""
-    if tipo_autor == "Entidade (Órgão/Instituição)" and entidade:
-        referencia = entity.strip()
-    elif tem_organizador and not any(a.strip() for a in autores_lista) and organizador_nome:
-        referencia = organizador_nome.strip().split()[-1]
-    elif autores_lista and autores_lista[0].strip():
-        referencia = autores_lista[0].strip().split()[-1]
-    else:
-        referencia = titulo.strip() if titulo else "X"
-        
-    letra = referencia[0].upper() if referencia else "X"
-    letra_titulo = titulo.strip()[0].lower() if titulo else "x"
-    return f"{letra}123{letra_titulo}"
-
+    ref = ""
+    if tipo_autor == "Entidade (Órgão/Instituição)" and entidade: ref = entidade.strip()
+    elif tem_organizador and not any(a.strip() for a in autores_lista) and organizador_nome: ref = organizador_nome.strip().split()[-1]
+    elif autores_lista and autores_lista[0].strip(): ref = autores_lista[0].strip().split()[-1]
+    else: ref = titulo.strip() if titulo else "X"
+    letra, letra_t = (ref[0].upper() if ref else "X"), (titulo.strip()[0].lower() if titulo else "x")
+    return f"{letra}123{letra_t}"
 
 # ==========================================
-# ⚖️ ESTADOS DE SESSÃO (CONTROLE DE CRÉDITOS)
+# ⚖️ ESTADOS DE SESSÃO E INICIALIZAÇÃO
 # ==========================================
 if "lote_fichas" not in st.session_state: st.session_state.lote_fichas = []
 if "assuntos_selecionados" not in st.session_state: st.session_state.assuntos_selecionados = []
 if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos = 0
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
-st.title("BiblioKhan — Sistema de Catalogação")
-st.subheader("⚖️ Gerador de Fichas Jurídicas — Módulo Avançado NBR/AACR2")
+# CONFIGURAÇÃO DA PLANILHA (Substitua pelo seu link real do Google Sheets)
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/SEU_ID_AQUI/edit?usp=sharing"
+
+st.title("BiblioKhan — Gestão Documental Jurídica")
 
 with st.sidebar:
-    st.markdown("### 🎓 Autoria do Sistema")
-    st.markdown("Desenvolvido e idealizado por:")
+    st.markdown("### 🎓 Autoria")
     st.markdown("**Sabrina Lobeu** — *Bibliotecária*")
-    st.markdown("✉️ [sabslobeu@gmail.com](mailto:sabslobeu@gmail.com)")
     st.markdown("---")
-    st.caption("Ecossistema livre de campos redundantes e calibrado para literatura jurídica.")
+    if st.session_state.creditos_ativos > 0:
+        st.success(f"💳 Saldo: {st.session_state.creditos_ativos} fichas")
+    else:
+        st.error("💳 Sem créditos ativos")
 
-st.markdown("---")
-container_lote = st.container()
-with container_lote:
-    col_lote_1, col_lote_2 = st.columns([2, 1])
-    qtd_fichas = len(st.session_state.lote_fichas)
-    col_lote_1.subheader(f"📦 Lote de Trabalho Atual: {qtd_fichas} Ficha(s) Acumulada(s)")
+# ==========================================
+# 🌟 CRIAÇÃO DAS ABAS GLOBAIS (ESTRUTURA PRINCIPAL)
+# ==========================================
+tab_gerador, tab_financeiro = st.tabs(["⚖️ Catalogação em Lote", "💳 Compra e Gestão de Créditos"])
+
+# ---------------------------------------------------------
+# ABA 1: GERADOR DE FICHAS (TRABALHO)
+# ---------------------------------------------------------
+with tab_gerador:
+    # Aviso de bloqueio se não houver créditos
+    if st.session_state.creditos_ativos <= 0:
+        st.warning("🔒 O painel de salvamento está bloqueado. Valide seu Token na aba 'Gestão de Créditos' para continuar.")
     
-    if qtd_fichas > 0:
-        arquivo_word = gerar_docx_lote(st.session_state.lote_fichas)
-        col_lote_2.download_button(
-            label="📥 Baixar Lote Completo (.DOCX / Word)",
-            data=arquivo_word,
-            file_name="lote_fichas_aacr2.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+    col_lote_1, col_lote_2 = st.columns([2, 1])
+    qtd_f = len(st.session_state.lote_fichas)
+    col_lote_1.subheader(f"📦 Lote Atual: {qtd_f} Ficha(s)")
+    if qtd_f > 0:
+        col_lote_2.download_button("📥 Baixar Word", gerar_docx_lote(st.session_state.lote_fichas), "lote_bibliokhan.docx")
         if col_lote_2.button("🗑️ Limpar Lote"):
             st.session_state.lote_fichas = []
             st.rerun()
-    else:
-        col_lote_2.info("O lote está vazio. Conclua uma ficha abaixo.")
-
-st.markdown("---")
-col_esquerda, col_direita = st.columns(2)
-
-# --- COLUNA DA ESQUERDA (DADOS DO LIVRO) ---
-with col_esquerda:
-    st.subheader("1. Metadados & Responsabilidade")
-    classificacao = st.text_input("Número de Classificação (CDD ou CDU)", value="340.1")
-    tipo_autor = st.radio("Tipo de Autoria Principal", ["Pessoa Física", "Entidade (Órgão/Instituição)"], horizontal=True)
-    
-    autores_lista = []
-    entidade_nome = ""
-    
-    if tipo_autor == "Pessoa Física":
-        qtd_autores_input = st.number_input("Quantidade de autores principais (0 se houver apenas Organizador)", min_value=0, max_value=10, value=1)
-        for i in range(int(qtd_autores_input)):
-            autores_lista.append(st.text_input(f"Autor {i+1} (Nome Sobrenome)", key=f"autor_{i}"))
-    else:
-        entidade_nome = st.text_input("Nome da Entidade (Ex: Brasil. Supremo Tribunal Federal)")
-        
-    titulo = st.text_input("Título Principal")
-    
-    st.markdown("---")
-    col_resp_1, col_resp_2 = st.columns(2)
-    
-    with col_resp_1:
-        tem_organizador = st.checkbox("Possui Organizador/Coordenador?")
-        organizador_nome = ""
-        tipo_org, abreviatura_org = "", ""
-        if tem_organizador:
-            papel = st.selectbox("Função:", ["Organizador", "Coordenador", "Compilador"])
-            organizador_nome = st.text_input("Nome do Responsável")
-            if papel == "Organizador": tipo_org, abreviatura_org = "organizado", "org."
-            elif papel == "Coordenador": tipo_org, abreviatura_org = "coordenado", "coord."
-            else: tipo_org, abreviatura_org = "compilado", "comp."
-            
-    with col_resp_2:
-        tem_tradutor = st.checkbox("A obra possui Tradutor?")
-        tradutor_nome = ""
-        if tem_tradutor:
-            tradutor_nome = st.text_input("Nome do Tradutor (Nome Sobrenome)", key="trad_nome")
 
     st.markdown("---")
-    st.subheader("2. Publicação & Descrição Física")
-    edicao = st.text_input("Edição (Ex: 2. ed., 3. ed. rev. e ampl.)", value="1. ed.")
-    editora = st.text_input("Editora")
-    cidade = st.text_input("Cidade de Publicação", value="Brasília")
-    ano = st.text_input("Ano de Publicação", value="2026")
-    paginas = st.text_input("Número de Páginas/Folhas", value="180")
-    
-    tem_colecao = st.checkbox("Esta obra faz parte de uma Coleção / Série?")
-    colecao_nome = ""
-    if tem_colecao:
-        colecao_nome = st.text_input("Nome da Coleção e Volume (Ex: Biblioteca jurídica, v. 12)")
-        
-    isbn = st.text_input("ISBN (Ex: 978-65-0000-00-0)")
-    suporte = st.radio("Suporte da Obra", ["Impresso", "Digital"], horizontal=True)
-    url_acesso = st.text_input("URL de Acesso / DOI") if suporte == "Digital" else ""
+    col_esq, col_dir = st.columns(2)
 
-# --- COLUNA DA DIREITA (SISTEMA DE ABAS + INDEXAÇÃO + PREVIEW) ---
-with col_direita:
-    st.subheader("🔑 Gestão de Acesso e Fichas")
-    
-    # URL DA SUA PLANILHA GOOGLE
-    # IMPORTANTE: Substitua o link abaixo pelo link real da sua planilha configurada como "Qualquer pessoa com o link pode editar"
-    URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk"
-    
-    aba_validar, aba_comprar = st.tabs(["🔓 Validar Token", "🛒 Compra de Créditos"])
-    
-    # ---- CONTEÚDO DA ABA 1: VALIDAR TOKEN (LIGAÇÃO COM A PLANILHA) ----
-    with aba_validar:
-        if st.session_state.creditos_ativos <= 0:
-            st.warning("🔒 Recursos de salvamento bloqueados. Insira seu Token de Créditos para começar.")
-            token_input = st.text_input("Digite seu Token de Créditos", type="password", key="token_input_topo")
-            
-            if st.button("🔓 Ativar Créditos", key="btn_ativar_topo"):
-                token_limpo = token_input.strip().upper()
-                try:
-                    # Converte o link de visualização da planilha para exportação direta em CSV em tempo real
-                    url_csv = URL_PLANILHA.replace("/edit?usp=sharing", "/gviz/tq?tqx=out:csv")
-                    df = pd.read_csv(url_csv)
-                    
-                    # Verifica se o token inserido existe na coluna 'token' da planilha
-                    if token_limpo in df['token'].values:
-                        # Puxa o valor da coluna 'creditos' correspondente àquele token
-                        creditos_banco = int(df.loc[df['token'] == token_limpo, 'creditos'].values[0])
-                        
-                        if creditos_banco > 0:
-                            st.session_state.creditos_ativos = creditos_banco
-                            st.session_state.token_atual = token_limpo
-                            st.success(f"✅ Conectado à planilha! Encontradas {creditos_banco} fichas disponíveis.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Os créditos deste token estão zerados na planilha. Recarregue na aba ao lado.")
-                    else:
-                        st.error("❌ Código não encontrado na base de dados. Verifique se digitou corretamente.")
-                except Exception as e:
-                    st.error("Erro ao conectar à planilha de dados. Verifique o link ou as permissões de compartilhamento.")
-        else:
-            st.markdown(f"""
-            <div style="background-color: #B19FFB; padding: 15px; border-radius: 8px; text-align: center; margin-top: 10px;">
-                <h4 style="color: black; margin: 0;">💳 Token: <span style="font-family: monospace;">{st.session_state.token_atual}</span></h4>
-                <h3 style="color: black; margin: 5px 0 0 0;">Saldo: <strong>{st.session_state.creditos_ativos} fichas</strong></h3>
-                <p style="color: #333; margin: 5px 0 0 0; font-size: 11px;">Para atualizar o saldo após uma recarga, limpe o navegador ou reintroduza o token.</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-    # ---- CONTEÚDO DA ABA 2: COMPRA DE CRÉDITOS ----
-    with aba_comprar:
-        st.markdown("### Adquira créditos e elimine tarefas repetitivas")
-        st.markdown("*Seus créditos não expiram. Use no seu ritmo, quando precisar.*")
+    with col_esq:
+        st.subheader("1. Metadados")
+        classif = st.text_input("Classificação", value="340.1")
+        tipo_a = st.radio("Autoria", ["Pessoa Física", "Entidade"], horizontal=True)
+        aut_list, ent_n = [], ""
+        if tipo_a == "Pessoa Física":
+            q_a = st.number_input("Qtd Autores", 0, 10, 1)
+            for i in range(int(q_a)): aut_list.append(st.text_input(f"Autor {i+1}", key=f"a_{i}"))
+        else: ent_n = st.text_input("Nome da Entidade")
+        tit = st.text_input("Título Principal")
         
-        st.markdown("""
-        * **Pacote Essencial (30 Fichas)** — R$ 49,00 *(R$ 1,63 por ficha)*
-        * **Pacote Prático (60 Fichas)** — R$ 89,00  ⚡ *Economize R$ 9!*
-        * **Pacote Profissional (100 Fichas)** — **R$ 129,00** 🔥 **[MAIS VENDIDO — O dobro de fichas por apenas +R$40]**
-        * **Pacote Advanced (300 Fichas)** — **R$ 299,00** 🚀 **[MELHOR CUSTO-BENEFÍCIO — Ficha por R$ 0,99]**
-        * **Pacote Premium (500 Fichas)** — R$ 449,00 *(Apenas R$ 0,89 por unidade)*
-        """)
+        c1, c2 = st.columns(2)
+        with c1:
+            tem_org = st.checkbox("Organizador?")
+            org_n, t_org, a_org = "", "", ""
+            if tem_org:
+                pap = st.selectbox("Função", ["Organizador", "Coordenador"])
+                org_n = st.text_input("Nome Org")
+                t_org, a_org = ("organizado", "org.") if pap == "Organizador" else ("coordenado", "coord.")
+        with c2:
+            tem_tr = st.checkbox("Tradutor?")
+            tr_n = st.text_input("Nome Tradutor") if tem_tr else ""
+
+        st.subheader("2. Publicação")
+        ed, edtr, cid, an = st.text_input("Edição", "1. ed."), st.text_input("Editora"), st.text_input("Cidade", "Brasília"), st.text_input("Ano", "2026")
+        pag, isb = st.text_input("Páginas", "180"), st.text_input("ISBN")
+        sup = st.radio("Suporte", ["Impresso", "Digital"], horizontal=True)
+        url_a = st.text_input("URL/DOI") if sup == "Digital" else ""
+
+    with col_dir:
+        st.subheader("3. Indexação (Senado VCB)")
+        t_busca = st.text_input("Buscar termo jurídico:")
+        if t_busca:
+            res = buscar_vcb_senado(t_busca)
+            if res:
+                opc = {i["termo"]: i for i in res}
+                sel = st.selectbox("Conceito oficial:", sorted(opc.keys()))
+                if st.button("➕ Vincular"):
+                    if sel not in st.session_state.assuntos_selecionados:
+                        st.session_state.assuntos_selecionados.append(sel)
+                        st.rerun()
         
+        if st.session_state.assuntos_selecionados:
+            st.write("Assuntos:", ", ".join(st.session_state.assuntos_selecionados))
+            if st.button("🗑️ Limpar Assuntos"):
+                st.session_state.assuntos_selecionados = []; st.rerun()
+
         st.markdown("---")
-        st.info("🔑 **Chave PIX (E-mail):** `bibliokhancontato@gmail.com` \n\n*Faça o Pix no valor do pacote desejado e anexe o comprovante abaixo para que possamos recarregar seu saldo na planilha.*")
+        st.subheader("4. Pré-visualização")
+        # Lógica de montagem da ficha
+        ent_p, resp, e_tit = formatar_entrada_e_corpo(tipo_a, aut_list, ent_n, tit, tem_org, org_n, t_org, tem_tr, tr_n)
+        cut = calcular_cutter(tipo_a, aut_list, ent_n, tit, tem_org, org_n)
+        d_fis = f"1 recurso online ({pag} f.) " if sup == "Digital" else f"{pag} f"
+        pub = f"{cid.strip()} : {edtr.strip()}, {an.strip()}."
+        ass_s = " ".join([f"{i+1}. {ass}" for i, ass in enumerate(st.session_state.assuntos_selecionados)])
+        rast = f" I. Título." if not e_tit else ""
         
-        with st.form(key="form_pix_aba"):
-            st.markdown("##### Formulário de Restauração de Saldo")
-            nome_comprador = st.text_input("Seu Nome Completo")
-            email_comprador = st.text_input("Seu E-mail de Contato")
-            comprovante_arquivo = st.file_uploader("Anexe o Comprovante do PIX", type=["pdf", "png", "jpg", "jpeg"])
-            
-            botao_enviar_pix = st.form_submit_button("📩 Enviar Comprovante")
-            
-            if botao_enviar_pix:
-                if nome_comprador.strip() and email_comprador.strip() and comprovante_arquivo is not None:
-                    st.success("✅ Comprovante enviado com sucesso!")
-                    st.info("⏳ Em breve seus créditos serão restaurados. Você receberá um e-mail de confirmação assim que atualizarmos a planilha!")
-                else:
-                    st.error("❌ Por favor, preencha todos os campos e anexe o comprovante.")
+        f_txt = f"{classif}\n{cut}   {ent_p if not e_tit else tit.strip()}\n            {tit.strip() if not e_tit else ''} / {resp}. – {ed} – {pub}\n            {d_fis}.\n\n            {ass_s}{rast}"
+        st.text_area("Ficha AACR2", value=f_txt, height=200)
+        
+        # BOTÃO DE SALVAMENTO (BLOQUEADO POR CRÉDITO)
+        btn_lock = st.session_state.creditos_ativos <= 0
+        if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=btn_lock):
+            if tit.strip():
+                st.session_state.lote_fichas.append(f_txt)
+                st.session_state.creditos_ativos -= 1
+                st.session_state.assuntos_selecionados = []
+                st.success("Salvo! Crédito deduzido."); st.rerun()
+            else: st.error("Preencha o título.")
 
-    st.markdown("---")
-    st.subheader("3. Indexação por Assunto")
-    st.markdown("##### 🏛️ Buscar no VCB do Senado Federal")
-    termo_busca = st.text_input("Digite um termo jurídico para pesquisar:")
+# ---------------------------------------------------------
+# ABA 2: FINANCEIRO E CRÉDITOS (GESTÃO)
+# ---------------------------------------------------------
+with tab_financeiro:
+    st.header("💳 Gestão Financeira e Saldo")
     
-    if termo_busca:
-        resultados_vcb = buscar_vcb_senado(termo_busca)
-        if resultados_vcb:
-            st.success(f"{len(resultados_vcb)} conceitos localizados no Senado!")
-            mapeamento_opcoes = {item["termo"]: item for item in resultados_vcb}
-            lista_opcoes = sorted(list(mapeamento_opcoes.keys()))
-            termo_selecionado = st.selectbox("Selecione o conceito oficial:", lista_opcoes)
-            
-            if st.button("➕ Vincular Assunto do Senado"):
-                if termo_selecionado not in st.session_state.assuntos_selecionados:
-                    st.session_state.assuntos_selecionados.append(termo_selecionado)
+    col_f1, col_f2 = st.columns(2)
+    
+    with col_f1:
+        st.subheader("🔓 Validar Acesso")
+        tk_in = st.text_input("Insira seu Token (E-mail ou Nome)", type="password")
+        if st.button("Ativar Sistema"):
+            try:
+                url_csv = URL_PLANILHA.replace("/edit?usp=sharing", "/gviz/tq?tqx=out:csv")
+                df = pd.read_csv(url_csv)
+                tk_c = tk_in.strip().upper()
+                if tk_c in df['token'].values:
+                    st.session_state.creditos_ativos = int(df.loc[df['token'] == tk_c, 'creditos'].values[0])
+                    st.session_state.token_atual = tk_c
+                    st.success(f"Token Ativo! Saldo: {st.session_state.creditos_ativos}")
                     st.rerun()
-        else:
-            st.warning("Nenhum termo correspondente retornado pela API do Senado.")
+                else: st.error("Token não localizado na planilha.")
+            except: st.error("Erro ao conectar à planilha. Verifique o link.")
 
-    st.markdown("##### ✍️ Adicionar Assunto Manualmente")
-    assunto_manual = st.text_input("Digite um assunto customizado:")
-    if st.button("➕ Vincular Assunto Manual"):
-        if assunto_manual.strip():
-            termo_limpo = assunto_manual.strip()
-            if termo_limpo not in st.session_state.assuntos_selecionados:
-                st.session_state.assuntos_selecionados.append(termo_limpo)
-                st.rerun()
-
-    if st.session_state.assuntos_selecionados:
-        st.write("**Assuntos Vinculados à Ficha:**")
-        for idx, ass in enumerate(st.session_state.assuntos_selecionados):
-            st.write(f"{idx+1}. {ass}")
-        if st.button("🗑️ Limpar Assuntos"):
-            st.session_state.assuntos_selecionados = []
-            st.rerun()
+    with col_f2:
+        st.subheader("🛒 Tabela de Preços")
+        st.markdown("""
+        * **30 Fichas** — R$ 49,00
+        * **60 Fichas** — R$ 89,00 
+        * **100 Fichas** — **R$ 129,00 [RECOMENDADO]**
+        * **300 Fichas** — R$ 299,00
+        """)
+        st.info("🔑 **PIX:** `bibliokhancontato@gmail.com`")
 
     st.markdown("---")
-    st.subheader("4. Pré-visualização Normativa da Ficha")
-    
-    # --- MONTAGEM DA FICHA CATALOGRÁFICA ---
-    entrada_principal, responsabilidade, entrada_por_titulo = formatar_entrada_e_corpo(
-        tipo_autor, autores_lista, entity=entidade_nome, titulo=titulo, tem_organizador=tem_organizador, organizador_nome=organizador_nome, tipo_org=tipo_org, tem_tradutor=tem_tradutor, tradutor_nome=tradutor_nome
-    )
-    
-    cutter = calcular_cutter(tipo_autor, autores_lista, entidade_nome, titulo, tem_organizador, organizador_nome)
-    
-    dgm = " [recurso eletrônico]" if suporte == "Digital" else ""
-    desc_fisica = f"1 recurso online ({paginas} f.) " if suporte == "Digital" else f"{paginas} f"
-    
-    bloco_colecao = ""
-    if tem_colecao and colecao_nome.strip():
-        texto_colecao = colecao_nome.strip()
-        texto_colecao = texto_colecao[0].upper() + texto_colecao[1:]
-        bloco_colecao = f" ({texto_colecao})"
-        
-    nota_acesso = f"\n            Modo de acesso: {url_acesso}" if suporte == "Digital" and url_acesso else ""
-    isbn_bloco = f"\n            ISBN {isbn}" if isbn.strip() else ""
-    nota_traducao = f"\n            Traduzido de obra original." if tem_tradutor and tradutor_nome.strip() else ""
-    
-    ed_bloco = f"{edicao.strip()} – " if edicao.strip() else ""
-    pub_bloco = f"{cidade.strip()} : {editora.strip()}, {ano.strip()}."
-    
-    string_assuntos = " ".join([f"{i+1}. {ass}" for i, ass in enumerate(st.session_state.assuntos_selecionados)])
-    
-    rastreabilidade = ""
-    romanos = ["I", "II", "III", "IV", "V"]
-    r_idx = 0
-    
-    if not entrada_por_titulo:
-        rastreabilidade += f" {romanos[r_idx]}. Título."
-        r_idx += 1
-        
-    if tem_organizador and organizador_nome.strip():
-        partes_org = organizador_nome.strip().split()
-        nome_invertido_org = f"{partes_org[-1].upper()}, {' '.join(partes_org[:-1])}" if len(partes_org) > 1 else organizador_nome.strip().upper()
-        rastreabilidade += f" {romanos[r_idx]}. {nome_invertido_org}, {abreviatura_org}."
-        r_idx += 1
-        
-    if tem_tradutor and tradutor_nome.strip():
-        partes_trad = tradutor_nome.strip().split()
-        nome_invertido_trad = f"{partes_trad[-1].upper()}, {' '.join(partes_trad[:-1])}" if len(partes_trad) > 1 else tradutor_nome.strip().upper()
-        rastreabilidade += f" {romanos[r_idx]}. {nome_invertido_trad}, trad."
-        r_idx += 1
-
-    if entrada_por_titulo:
-        txt_ficha = f"""{classificacao}
-{cutter}   {titulo.strip()}{dgm} / {responsabilidade}. – {ed_bloco}{pub_bloco}
-            {desc_fisica}.{bloco_colecao}{nota_traducao}{nota_acesso}{isbn_bloco}
-            
-            {string_assuntos}{rastreabilidade}"""
-    else:
-        txt_ficha = f"""{classificacao}
-{cutter}   {entrada_principal}
-            {titulo.strip()}{dgm} / {responsabilidade}. – {ed_bloco}{pub_bloco}
-            {desc_fisica}.{bloco_colecao}{nota_traducao}{nota_acesso}{isbn_bloco}
-            
-            {string_assuntos}{rastreabilidade}"""
-            
-    st.text_area("Ficha Gerada (Fonte Monoespaçada)", value=txt_ficha, height=240)
-    
-    # CONTROLADOR DE ATIVAÇÃO DO BOTÃO
-    desabilitar_botao = st.session_state.creditos_ativos <= 0
-    
-    if st.button("💾 CONCLUIR FICHA E ENVIAR AO LOTE", disabled=desabilitar_botao, key="btn_salvar_lote"):
-        valido = True
-        if tipo_autor == "Pessoa Física" and not any(a.strip() for a in autores_lista) and not tem_organizador:
-            valido = False
-        if tipo_autor == "Entidade (Órgão/Instituição)" and not entidade_nome.strip():
-            valido = False
-            
-        if valido and titulo.strip():
-            st.session_state.lote_fichas.append(txt_ficha)
-            st.session_state.assuntos_selecionados = [] 
-            
-            # Desconta o crédito em tempo de execução na tela do cliente
-            st.session_state.creditos_ativos -= 1
-            st.success("Ficha guardada com sucesso no lote superior!")
-            st.rerun()
-        else:
-            st.error("Preencha os campos de autoria/organização e o título antes de salvar.")
+    st.subheader("📩 Envio de Comprovante")
+    with st.form("pix_form"):
+        n_c = st.text_input("Nome Completo")
+        e_c = st.text_input("E-mail")
+        arq = st.file_uploader("Anexe o comprovante", type=["jpg", "png", "pdf"])
+        if st.form_submit_button("Enviar para Restauração de Saldo"):
+            if n_c and arq:
+                st.success("Enviado! Em breve Sabrina atualizará seu saldo na planilha e você receberá um aviso.")
+            else: st.error("Preencha os campos obrigatórios.")
