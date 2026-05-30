@@ -107,7 +107,7 @@ def formatar_entrada_e_corpo(tipo_autor, autores_lista, entity, titulo, tem_orga
 def calcular_cutter(tipo_autor, autores_lista, entidade, titulo, tem_organizador, organizador_nome):
     referencia = ""
     if tipo_autor == "Entidade (Órgão/Instituição)" and entidade:
-        referencia = entidade.strip()
+        referencia = entity.strip()
     elif tem_organizador and not any(a.strip() for a in autores_lista) and organizador_nome:
         referencia = organizador_nome.strip().split()[-1]
     elif autores_lista and autores_lista[0].strip():
@@ -126,7 +126,7 @@ def calcular_cutter(tipo_autor, autores_lista, entidade, titulo, tem_organizador
 if "lote_fichas" not in st.session_state: st.session_state.lote_fichas = []
 if "assuntos_selecionados" not in st.session_state: st.session_state.assuntos_selecionados = []
 if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos = 0
-if "token_validado" not in st.session_state: st.session_state.token_validado = False
+if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
 st.title("BiblioKhan — Sistema de Catalogação")
 st.subheader("⚖️ Gerador de Fichas Jurídicas — Módulo Avançado NBR/AACR2")
@@ -218,31 +218,72 @@ with col_esquerda:
     suporte = st.radio("Suporte da Obra", ["Impresso", "Digital"], horizontal=True)
     url_acesso = st.text_input("URL de Acesso / DOI") if suporte == "Digital" else ""
 
-# --- COLUNA DA DIREITA (CRÉDITOS NO TOPO + INDEXAÇÃO + PREVIEW) ---
+# --- COLUNA DA DIREITA (SISTEMA DE ABAS + INDEXAÇÃO + PREVIEW) ---
 with col_direita:
-    st.subheader("🔑 Controle de Créditos e Acesso")
+    st.subheader("🔑 Gestão de Acesso e Fichas")
     
-    # 🔒 SE O UTILIZADOR NÃO TIVER CRÉDITOS NA SESSÃO
-    if st.session_state.creditos_ativos <= 0:
-        st.warning("🔒 Recursos de salvamento bloqueados. Insira seu Token de Créditos para começar.")
-        token_input = st.text_input("Digite seu Token de Créditos (Para teste: TESTE50)", type="password", key="token_input_topo")
+    # URL DA SUA PLANILHA GOOGLE
+    # IMPORTANTE: Substitua o link abaixo pelo link real da sua planilha configurada como "Qualquer pessoa com o link pode editar"
+    URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk"
+    
+    aba_validar, aba_comprar = st.tabs(["🔓 Validar Token", "🛒 Compra de Créditos"])
+    
+    # ---- CONTEÚDO DA ABA 1: VALIDAR TOKEN (LIGAÇÃO COM A PLANILHA) ----
+    with aba_validar:
+        if st.session_state.creditos_ativos <= 0:
+            st.warning("🔒 Recursos de salvamento bloqueados. Insira seu Token de Créditos para começar.")
+            token_input = st.text_input("Digite seu Token de Créditos", type="password", key="token_input_topo")
+            
+            if st.button("🔓 Ativar Créditos", key="btn_ativar_topo"):
+                token_limpo = token_input.strip().upper()
+                try:
+                    # Converte o link de visualização da planilha para exportação direta em CSV em tempo real
+                    url_csv = URL_PLANILHA.replace("/edit?usp=sharing", "/gviz/tq?tqx=out:csv")
+                    df = pd.read_csv(url_csv)
+                    
+                    # Verifica se o token inserido existe na coluna 'token' da planilha
+                    if token_limpo in df['token'].values:
+                        # Puxa o valor da coluna 'creditos' correspondente àquele token
+                        creditos_banco = int(df.loc[df['token'] == token_limpo, 'creditos'].values[0])
+                        
+                        if creditos_banco > 0:
+                            st.session_state.creditos_ativos = creditos_banco
+                            st.session_state.token_atual = token_limpo
+                            st.success(f"✅ Conectado à planilha! Encontradas {creditos_banco} fichas disponíveis.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Os créditos deste token estão zerados na planilha. Recarregue na aba ao lado.")
+                    else:
+                        st.error("❌ Código não encontrado na base de dados. Verifique se digitou corretamente.")
+                except Exception as e:
+                    st.error("Erro ao conectar à planilha de dados. Verifique o link ou as permissões de compartilhamento.")
+        else:
+            st.markdown(f"""
+            <div style="background-color: #B19FFB; padding: 15px; border-radius: 8px; text-align: center; margin-top: 10px;">
+                <h4 style="color: black; margin: 0;">💳 Token: <span style="font-family: monospace;">{st.session_state.token_atual}</span></h4>
+                <h3 style="color: black; margin: 5px 0 0 0;">Saldo: <strong>{st.session_state.creditos_ativos} fichas</strong></h3>
+                <p style="color: #333; margin: 5px 0 0 0; font-size: 11px;">Para atualizar o saldo após uma recarga, limpe o navegador ou reintroduza o token.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    # ---- CONTEÚDO DA ABA 2: COMPRA DE CRÉDITOS ----
+    with aba_comprar:
+        st.markdown("### Adquira créditos e elimine tarefas repetitivas")
+        st.markdown("*Seus créditos não expiram. Use no seu ritmo, quando precisar.*")
         
-        if st.button("🔓 Ativar Créditos", key="btn_ativar_topo"):
-            if token_input.strip().upper() == "TESTE50":
-                st.session_state.creditos_ativos = 50
-                st.session_state.token_validado = True
-                st.success("✅ Token validado! 50 créditos adicionados.")
-                st.rerun()
-            else:
-                st.error("❌ Código inválido. Contacte bibliokhancontato@gmail.com")
-                
+        st.markdown("""
+        * **Pacote Essencial (30 Fichas)** — R$ 49,00 *(R$ 1,63 por ficha)*
+        * **Pacote Prático (60 Fichas)** — R$ 89,00  ⚡ *Economize R$ 9!*
+        * **Pacote Profissional (100 Fichas)** — **R$ 129,00** 🔥 **[MAIS VENDIDO — O dobro de fichas por apenas +R$40]**
+        * **Pacote Advanced (300 Fichas)** — **R$ 299,00** 🚀 **[MELHOR CUSTO-BENEFÍCIO — Ficha por R$ 0,99]**
+        * **Pacote Premium (500 Fichas)** — R$ 449,00 *(Apenas R$ 0,89 por unidade)*
+        """)
+        
         st.markdown("---")
-        st.subheader("🛒 Adquirir Novo Lote de Fichas (Via PIX)")
-        st.info("🔑 **Chave PIX (E-mail):** `bibliokhancontato@gmail.com` \n\n*Valores sugeridos:* \n* 30 fichas: R$ 49 \n* 60 fichas: R$ 89 \n* 100 fichas: R$ 129")
+        st.info("🔑 **Chave PIX (E-mail):** `bibliokhancontato@gmail.com` \n\n*Faça o Pix no valor do pacote desejado e anexe o comprovante abaixo para que possamos recarregar seu saldo na planilha.*")
         
-        # Formulário "Mágico de Oz" para upload de comprovantes
-        with st.form(key="form_pix"):
-            st.markdown("##### Envie seu comprovante para liberação dos créditos:")
+        with st.form(key="form_pix_aba"):
+            st.markdown("##### Formulário de Restauração de Saldo")
             nome_comprador = st.text_input("Seu Nome Completo")
             email_comprador = st.text_input("Seu E-mail de Contato")
             comprovante_arquivo = st.file_uploader("Anexe o Comprovante do PIX", type=["pdf", "png", "jpg", "jpeg"])
@@ -251,16 +292,10 @@ with col_direita:
             
             if botao_enviar_pix:
                 if nome_comprador.strip() and email_comprador.strip() and comprovante_arquivo is not None:
-                    st.success("✅ Comprovante enviado com sucesso para a nossa equipe!")
-                    st.info("⏳ Em breve seus créditos serão restaurados. Você receberá um e-mail com o seu Token de Acesso assim que o pagamento for compensado manualmente.")
+                    st.success("✅ Comprovante enviado com sucesso!")
+                    st.info("⏳ Em breve seus créditos serão restaurados. Você receberá um e-mail de confirmação assim que atualizarmos a planilha!")
                 else:
                     st.error("❌ Por favor, preencha todos os campos e anexe o comprovante.")
-    else:
-        st.markdown(f"""
-        <div style="background-color: #B19FFB; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-            <h4 style="color: black; margin: 0;">💳 Saldo Atual: <strong>{st.session_state.creditos_ativos} fichas jurídicas</strong></h4>
-        </div>
-        """, unsafe_allow_html=True)
 
     st.markdown("---")
     st.subheader("3. Indexação por Assunto")
@@ -377,9 +412,9 @@ with col_direita:
             st.session_state.lote_fichas.append(txt_ficha)
             st.session_state.assuntos_selecionados = [] 
             
-            # Desconta o crédito em tempo de execução
+            # Desconta o crédito em tempo de execução na tela do cliente
             st.session_state.creditos_ativos -= 1
-            st.success("Ficha guardada com sucesso no lote superior e 1 crédito consumido!")
+            st.success("Ficha guardada com sucesso no lote superior!")
             st.rerun()
         else:
             st.error("Preencha os campos de autoria/organização e o título antes de salvar.")
