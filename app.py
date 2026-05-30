@@ -231,16 +231,33 @@ with tab_financeiro:
         tk_in = st.text_input("Insira seu Token (E-mail ou Nome)", type="password")
         if st.button("Ativar Sistema"):
             try:
-                url_csv = URL_PLANILHA.replace("/edit?usp=sharing", "/gviz/tq?tqx=out:csv")
+                # Trata a URL de forma robusta, independentemente do final (?usp=drivesdk, /edit, etc.)
+                base_url = https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk.split("/edit")[0]
+                url_csv = f"{base_url}/gviz/tq?tqx=out:csv"
+                
+                # Lê a planilha usando o Pandas
                 df = pd.read_csv(url_csv)
+                
+                # Força os cabeçalhos para letras minúsculas para evitar erros de digitação na planilha
+                df.columns = df.columns.str.strip().str.lower()
+                
                 tk_c = tk_in.strip().upper()
-                if tk_c in df['token'].values:
-                    st.session_state.creditos_ativos = int(df.loc[df['token'] == tk_c, 'creditos'].values[0])
-                    st.session_state.token_atual = tk_c
-                    st.success(f"Token Ativo! Saldo: {st.session_state.creditos_ativos}")
-                    st.rerun()
-                else: st.error("Token não localizado na planilha.")
-            except: st.error("Erro ao conectar à planilha. Verifique o link.")
+                
+                if 'token' in df.columns and 'creditos' in df.columns:
+                    # Converte a coluna token para maiúsculas para cruzar os dados corretamente
+                    df['token'] = df['token'].astype(str).str.strip().str.upper()
+                    
+                    if tk_c in df['token'].values:
+                        st.session_state.creditos_ativos = int(df.loc[df['token'] == tk_c, 'creditos'].values[0])
+                        st.session_state.token_atual = tk_c
+                        st.success(f"Token Ativo! Saldo: {st.session_state.creditos_ativos}")
+                        st.rerun()
+                    else:
+                        st.error("Token não localizado na planilha. Verifique se digitou corretamente.")
+                else:
+                    st.error("Erro de estrutura: A planilha precisa ter as colunas 'token' e 'creditos' na primeira linha.")
+            except Exception as e:
+                st.error("Erro ao conectar à planilha. Verifique o link ou se ela está configurada como 'Qualquer pessoa com o link'.")
 
     with col_f2:
         st.subheader("🛒 Tabela de Preços")
