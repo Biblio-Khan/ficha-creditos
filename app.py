@@ -112,8 +112,8 @@ if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 # CONFIGURAÇÃO DA PLANILHA (Coloque o link da sua planilha aqui)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
-# SEU E-MAIL DE RECEBIMENTO DOS COMPROVANTES
-EMAIL_DESTINO = "bibliokhancontato@gmail.com"
+# 🌟 ATUALIZADO: SEU TOKEN MASCARADO DO FORMSUBMIT
+EMAIL_DESTINO = "9d3ad159dbbf47082b413743bcff6d61"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
@@ -271,23 +271,19 @@ with tab_financeiro:
             if nome_cliente.strip() and email_cliente.strip() and comprovante is not None:
                 with st.spinner("Enviando comprovante... Por favor, aguarde."):
                     try:
-                        # Prepara a requisição HTTP multipart para o FormSubmit enviar o arquivo anexado
-                        url_formsubmit = f"https://formsubmit.co/ajax/9d3ad159dbbf47082b413743bcff6d61"
+                        url_formsubmit = f"https://formsubmit.co/ajax/{EMAIL_DESTINO}"
                         
-                        # Passa os dados do texto do formulário
                         dados_texto = {
                             "Nome do Cliente": nome_cliente,
                             "E-mail de Cadastro": email_cliente,
                             "_subject": f"🔥 NOVO COMPROVANTE: {nome_cliente}",
-                            "_captcha": "false" # Desativa o captcha pro Streamlit conseguir enviar direto
+                            "_captcha": "false"
                         }
                         
-                        # Passa o arquivo carregado na memória do Streamlit
                         arquivos = {
                             "Attachment": (comprovante.name, comprovante.getvalue(), comprovante.type)
                         }
                         
-                        # Dispara o envio
                         resposta = requests.post(url_formsubmit, data=dados_texto, files=arquivos)
                         
                         if resposta.status_code == 200:
