@@ -110,7 +110,6 @@ if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos =
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
 # CONFIGURAÇÃO DA PLANILHA (Substitua pelo seu link real do Google Sheets)
-URL_PLANILHA = "# CONFIGURAÇÃO DA PLANILHA (Atualizado com o seu link real)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
