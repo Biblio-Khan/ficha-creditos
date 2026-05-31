@@ -114,8 +114,8 @@ if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
 # 📱 CONFIGURAÇÃO DO SEU TELEGRAM (Substitua com seus dados reais para o teste)
-TELEGRAM_BOT_TOKEN = "7311100222:AAH_ExemploDeTokenFicticioAqui"
-TELEGRAM_CHAT_ID = "123456789"
+TELEGRAM_BOT_TOKEN = "7962375412:AAGuWvUslzWcv0WAdguYMN8vYO7tfaXYDb4"
+TELEGRAM_CHAT_ID = "8231373450"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
