@@ -132,7 +132,7 @@ if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos =
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
 # 📊 CONFIGURAÇÕES DO SISTEMA (Preencha aqui com os seus dados)
-URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk"
 
 TELEGRAM_BOT_TOKEN = "7962375412:AAGuWvUslzWcv0WAdguYMN8vYO7tfaXYDb4"
 TELEGRAM_CHAT_ID = "8231373450"
