@@ -102,6 +102,27 @@ def calcular_cutter(tipo_autor, autores_lista, entidade, titulo, tem_organizador
     letra, letra_t = (ref[0].upper() if ref else "X"), (titulo.strip()[0].lower() if titulo else "x")
     return f"{letra}123{letra_t}"
 
+# 🌟 FUNÇÃO CORRIGIDA PARA LER O LINK DA PLANILHA DO TELEMOVEL
+def carregar_creditos_planilha(url_original):
+    try:
+        # Se o link vier com /edit ou /usp=sharing, essa linha limpa e joga o formato correto de exportação em CSV
+        if "/edit" in url_original:
+            url_base = url_original.split("/edit")[0]
+        else:
+            url_base = url_original
+        
+        url_csv = f"{url_base}/gviz/tq?tqx=out:csv"
+        
+        # Faz a leitura usando o pandas
+        df = pd.read_csv(url_csv)
+        
+        # Padroniza o nome das colunas para letras minúsculas e sem espaços
+        df.columns = df.columns.str.strip().str.lower()
+        return df
+    except Exception as e:
+        st.error(f"Erro ao processar o link da planilha: {e}")
+        return None
+
 # ==========================================
 # ⚖️ ESTADOS DE SESSÃO E INICIALIZAÇÃO
 # ==========================================
@@ -110,10 +131,9 @@ if "assuntos_selecionados" not in st.session_state: st.session_state.assuntos_se
 if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos = 0
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
-# 📊 CONFIGURAÇÃO DA PLANILHA (Mantenha o seu link tratado aqui)
+# 📊 CONFIGURAÇÕES DO SISTEMA (Preencha aqui com os seus dados)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
-# 📱 CONFIGURAÇÃO DO SEU TELEGRAM (Substitua com seus dados reais para o teste)
 TELEGRAM_BOT_TOKEN = "7962375412:AAGuWvUslzWcv0WAdguYMN8vYO7tfaXYDb4"
 TELEGRAM_CHAT_ID = "8231373450"
 
@@ -220,7 +240,7 @@ with tab_gerador:
             else: st.error("Preencha o título.")
 
 # ---------------------------------------------------------
-# ABA 2: FINANCEIRO E CRÉDITOS (NOTIFICAÇÃO VIA TELEGRAM COM SELEÇÃO DE PACOTES)
+# ABA 2: FINANCEIRO E CRÉDITOS (LEITURA DA PLANILHA INTEGRADA)
 # ---------------------------------------------------------
 with tab_financeiro:
     st.header("💳 Gestão Financeira e Saldo")
@@ -230,23 +250,23 @@ with tab_financeiro:
         st.subheader("🔓 Validar Acesso")
         tk_in = st.text_input("Insira seu Token (E-mail de Cadastro)", type="password")
         if st.button("Ativar Sistema"):
-            try:
-                base_url = URL_PLANILHA.split("/edit")[0]
-                url_csv = f"{base_url}/gviz/tq?tqx=out:csv"
-                df = pd.read_csv(url_csv)
-                df.columns = df.columns.str.strip().str.lower()
+            # Chama a função inteligente que trata o link do telemóvel
+            df = carregar_creditos_planilha(URL_PLANILHA)
+            
+            if df is not None:
                 tk_c = tk_in.strip().upper()
-                
                 if 'token' in df.columns and 'creditos' in df.columns:
                     df['token'] = df['token'].astype(str).str.strip().str.upper()
+                    
                     if tk_c in df['token'].values:
                         st.session_state.creditos_ativos = int(df.loc[df['token'] == tk_c, 'creditos'].values[0])
                         st.session_state.token_atual = tk_c
                         st.success(f"Token Ativo! Saldo: {st.session_state.creditos_ativos}")
                         st.rerun()
-                    else: st.error("E-mail/Token não cadastrado na planilha.")
-                else: st.error("Planilha desalinhada. Use as colunas 'token' e 'creditos'.")
-            except: st.error("Erro ao conectar à planilha. Verifique o compartilhamento público.")
+                    else:
+                        st.error("E-mail/Token não cadastrado na planilha.")
+                else:
+                    st.error("A planilha não possui as colunas 'token' e 'creditos'. Ajuste os cabeçalhos.")
 
     with col_f2:
         st.subheader("🛒 Tabela de Preços")
@@ -261,12 +281,10 @@ with tab_financeiro:
     st.markdown("---")
     st.subheader("📩 Envio de Comprovante")
     
-    # FORMULÁRIO QUE CAPTURA OS CRÉDITOS SELECIONADOS E DISPARA PARA O TELEGRAM
     with st.form("pix_form"):
         nome_cliente = st.text_input("Nome Completo")
         email_cliente = st.text_input("E-mail de Cadastro no Sistema")
         
-        # 🌟 NOVA ATUALIZAÇÃO: CAIXA DE ESCOLHA DOS CRÉDITOS COMPRADOS
         pacote_escolhido = st.selectbox(
             "Qual pacote de créditos você comprou?",
             options=[
@@ -283,7 +301,6 @@ with tab_financeiro:
             if nome_cliente.strip() and email_cliente.strip() and comprovante is not None:
                 with st.spinner("Enviando dados de pagamento para a Sabrina... Por favor, aguarde."):
                     try:
-                        # 1. Monta o texto incluindo o pacote escolhido de forma clara
                         texto_notificacao = (
                             f"🔥 *NOVO COMPROVANTE RECEBIDO!*\n\n"
                             f"👤 *Cliente:* {nome_cliente.strip()}\n"
@@ -292,7 +309,6 @@ with tab_financeiro:
                             f"📅 *Data/Hora:* {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
                         )
                         
-                        # 2. Configura a API de envio de foto do Telegram
                         url_api_telegram = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
                         
                         ficheiro_envio = {
@@ -305,14 +321,13 @@ with tab_financeiro:
                             "parse_mode": "Markdown"
                         }
                         
-                        # 3. Dispara a mensagem
                         resposta_tg = requests.post(url_api_telegram, data=dados_requisicao, files=ficheiro_envio, timeout=15)
                         
                         if resposta_tg.status_code == 200:
                             st.success("✅ Comprovante enviado com sucesso!")
                             st.info("⏳ O seu saldo será atualizado assim que a Sabrina validar o recebimento do PIX.")
                         else:
-                            st.error(f"Erro na API do Telegram (Código {resposta_tg.status_code}). Verifique se as chaves estão corretas.")
+                            st.error(f"Erro na API do Telegram (Código {resposta_tg.status_code}). Verifique suas credenciais.")
                     except Exception as erro_conexao:
                         st.error(f"Erro de conexão ao tentar falar com o Telegram: {erro_conexao}")
             else:
