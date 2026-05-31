@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import datetime
 import requests
 from docx import Document
 from docx.shared import Pt
@@ -109,11 +110,12 @@ if "assuntos_selecionados" not in st.session_state: st.session_state.assuntos_se
 if "creditos_ativos" not in st.session_state: st.session_state.creditos_ativos = 0
 if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 
-# CONFIGURAÇÃO DA PLANILHA (Coloque o link da sua planilha aqui)
+# 📊 CONFIGURAÇÃO DA PLANILHA (Mantenha o seu link tratado aqui)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=sharing"
 
-# 🌟 ATUALIZADO: SEU TOKEN MASCARADO DO FORMSUBMIT
-EMAIL_DESTINO = "bibliokhancontato@gmail.com"
+# 📱 CONFIGURAÇÃO DO SEU TELEGRAM (Substitua com seus dados reais para o teste)
+TELEGRAM_BOT_TOKEN = "7311100222:AAH_ExemploDeTokenFicticioAqui"
+TELEGRAM_CHAT_ID = "123456789"
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
@@ -209,8 +211,7 @@ with tab_gerador:
         f_txt = f"{classif}\n{cut}   {ent_p if not e_tit else tit.strip()}\n            {tit.strip() if not e_tit else ''} / {resp}. – {ed} – {pub}\n            {d_fis}.\n\n            {ass_s}{rast}"
         st.text_area("Ficha AACR2", value=f_txt, height=200)
         
-        btn_lock = st.session_state.creditos_ativos <= 0
-        if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=btn_lock):
+        if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=st.session_state.creditos_ativos <= 0):
             if tit.strip():
                 st.session_state.lote_fichas.append(f_txt)
                 st.session_state.creditos_ativos -= 1
@@ -219,7 +220,7 @@ with tab_gerador:
             else: st.error("Preencha o título.")
 
 # ---------------------------------------------------------
-# ABA 2: FINANCEIRO E CRÉDITOS (COM DISPARO DE E-MAIL)
+# ABA 2: FINANCEIRO E CRÉDITOS (NOTIFICAÇÃO VIA TELEGRAM COM SELEÇÃO DE PACOTES)
 # ---------------------------------------------------------
 with tab_financeiro:
     st.header("💳 Gestão Financeira e Saldo")
@@ -254,44 +255,65 @@ with tab_financeiro:
         * **60 Fichas** — R$ 89,00 ⚡ *Economize R$ 9!*
         * **100 Fichas** — **R$ 129,00 [O DOBRO POR +R$40]**
         * **300 Fichas** — **R$ 299,00 [FICHA POR R$ 0,99]**
-        * **500 Fichas** — R$ 449,00 *(R$ 0,89/un)*
         """)
         st.info("🔑 **PIX:** `bibliokhancontato@gmail.com`")
 
     st.markdown("---")
     st.subheader("📩 Envio de Comprovante")
     
-    # FORMULÁRIO COM ENVIO REAL POR E-MAIL VIA FORMSUBMIT
+    # FORMULÁRIO QUE CAPTURA OS CRÉDITOS SELECIONADOS E DISPARA PARA O TELEGRAM
     with st.form("pix_form"):
         nome_cliente = st.text_input("Nome Completo")
         email_cliente = st.text_input("E-mail de Cadastro no Sistema")
+        
+        # 🌟 NOVA ATUALIZAÇÃO: CAIXA DE ESCOLHA DOS CRÉDITOS COMPRADOS
+        pacote_escolhido = st.selectbox(
+            "Qual pacote de créditos você comprou?",
+            options=[
+                "30 Fichas (R$ 49,00)",
+                "60 Fichas (R$ 89,00)",
+                "100 Fichas (R$ 129,00)",
+                "300 Fichas (R$ 299,00)"
+            ]
+        )
+        
         comprovante = st.file_uploader("Anexe a imagem ou PDF do comprovante do PIX", type=["jpg", "png", "jpeg", "pdf"])
         
         if st.form_submit_button("Enviar para Restauração de Saldo"):
             if nome_cliente.strip() and email_cliente.strip() and comprovante is not None:
-                with st.spinner("Enviando comprovante... Por favor, aguarde."):
+                with st.spinner("Enviando dados de pagamento para a Sabrina... Por favor, aguarde."):
                     try:
-                        url_formsubmit = f"https://formsubmit.co/ajax/{EMAIL_DESTINO}"
+                        # 1. Monta o texto incluindo o pacote escolhido de forma clara
+                        texto_notificacao = (
+                            f"🔥 *NOVO COMPROVANTE RECEBIDO!*\n\n"
+                            f"👤 *Cliente:* {nome_cliente.strip()}\n"
+                            f"📧 *E-mail:* {email_cliente.strip()}\n"
+                            f"💰 *Pacote Escolhido:* {pacote_escolhido}\n"
+                            f"📅 *Data/Hora:* {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+                        )
                         
-                        dados_texto = {
-                            "Nome do Cliente": nome_cliente,
-                            "E-mail de Cadastro": email_cliente,
-                            "_subject": f"🔥 NOVO COMPROVANTE: {nome_cliente}",
-                            "_captcha": "false"
+                        # 2. Configura a API de envio de foto do Telegram
+                        url_api_telegram = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+                        
+                        ficheiro_envio = {
+                            "photo": (comprovante.name, comprovante.getvalue(), comprovante.type)
                         }
                         
-                        arquivos = {
-                            "Attachment": (comprovante.name, comprovante.getvalue(), comprovante.type)
+                        dados_requisicao = {
+                            "chat_id": TELEGRAM_CHAT_ID,
+                            "caption": texto_notificacao,
+                            "parse_mode": "Markdown"
                         }
                         
-                        resposta = requests.post(url_formsubmit, data=dados_texto, files=arquivos)
+                        # 3. Dispara a mensagem
+                        resposta_tg = requests.post(url_api_telegram, data=dados_requisicao, files=ficheiro_envio, timeout=15)
                         
-                        if resposta.status_code == 200:
-                            st.success("✅ Comprovante enviado com sucesso para a nossa equipe!")
-                            st.info("⏳ Agora você já pode aguardar. Assim que validarmos o PIX, o seu saldo será atualizado na planilha.")
+                        if resposta_tg.status_code == 200:
+                            st.success("✅ Comprovante enviado com sucesso!")
+                            st.info("⏳ O seu saldo será atualizado assim que a Sabrina validar o recebimento do PIX.")
                         else:
-                            st.error("O servidor de e-mail recusou o envio. Tente novamente mais tarde.")
-                    except Exception as e:
-                        st.error("Erro interno ao tentar despachar o e-mail. Verifique sua conexão.")
+                            st.error(f"Erro na API do Telegram (Código {resposta_tg.status_code}). Verifique se as chaves estão corretas.")
+                    except Exception as erro_conexao:
+                        st.error(f"Erro de conexão ao tentar falar com o Telegram: {erro_conexao}")
             else:
-                st.error("❌ Por favor, preencha todos os campos e anexe o arquivo do comprovante.")
+                st.error("❌ Por favor, preencha todos os campos e anexe o ficheiro do comprovante.")
