@@ -134,8 +134,8 @@ if "token_atual" not in st.session_state: st.session_state.token_atual = ""
 # 📊 CONFIGURAÇÕES DO SISTEMA (Preencha aqui com os seus dados)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1epaFSWFhnd2Q_ZjGq32wdL3LeWpEqmFn1JFRBCh0j_U/edit?usp=drivesdk"
 
-TELEGRAM_BOT_TOKEN = "7962375412:AAGuWvUslzWcv0WAdguYMN8vYO7tfaXYDb4"
-TELEGRAM_CHAT_ID = "8231373450"
+TELEGRAM_BOT_TOKEN = st.secrets["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
 
 st.title("BiblioKhan — Gestão Documental Jurídica")
 
