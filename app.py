@@ -231,18 +231,25 @@ with tab_gerador:
         f_txt = f"{classif}\n{cut}   {ent_p if not e_tit else tit.strip()}\n            {tit.strip() if not e_tit else ''} / {resp}. – {ed} – {pub}\n            {d_fis}.\n\n            {ass_s}{rast}"
         st.text_area("Ficha AACR2", value=f_txt, height=200)
         
-        if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=st.session_state.creditos_ativos <= 0):
+       if st.button("💾 CONCLUIR E SALVAR NO LOTE", disabled=st.session_state.creditos_ativos <= 0):
             if tit.strip():
-                st.session_state.lote_fichas.append(f_txt)
-                st.session_state.creditos_ativos -= 1
-                st.session_state.assuntos_selecionados = []
-                st.success("Salvo! Crédito deduzido."); st.rerun()
-            else: st.error("Preencha o título.")
-                db.collection('historico_producao').add({
-                    'usuario': st.session_state["usuario_atual"], 
-                    'titulo_obra': titulo, 
-                    'data': firestore.SERVER_TIMESTAMP
-                })
+        # 1. Adiciona ao lote e atualiza estado local
+        st.session_state.lote_fichas.append(f_txt)
+        st.session_state.creditos_ativos -= 1
+        st.session_state.assuntos_selecionados = []
+        
+        # 2. Salva o registro no Firestore (histórico de longo prazo)
+        db.collection('historico_producao').add({
+            'usuario': st.session_state["usuario_atual"], 
+            'titulo_obra': tit, # Certifique-se que 'tit' é o título correto
+            'data': firestore.SERVER_TIMESTAMP
+        })
+        
+        # 3. Finaliza
+        st.success("Salvo! Crédito deduzido.")
+        st.rerun()
+    else:
+        st.error("Preencha o título.")
 
 # ---------------------------------------------------------
 # ABA 2: FINANCEIRO E CRÉDITOS (LEITURA DA PLANILHA INTEGRADA)
