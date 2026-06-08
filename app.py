@@ -238,6 +238,11 @@ with tab_gerador:
                 st.session_state.assuntos_selecionados = []
                 st.success("Salvo! Crédito deduzido."); st.rerun()
             else: st.error("Preencha o título.")
+                db.collection('historico_producao').add({
+                    'usuario': st.session_state["usuario_atual"], 
+                    'titulo_obra': titulo, 
+                    'data': firestore.SERVER_TIMESTAMP
+                })
 
 # ---------------------------------------------------------
 # ABA 2: FINANCEIRO E CRÉDITOS (LEITURA DA PLANILHA INTEGRADA)
@@ -332,3 +337,23 @@ with tab_financeiro:
                         st.error(f"Erro de conexão ao tentar falar com o Telegram: {erro_conexao}")
             else:
                 st.error("❌ Por favor, preencha todos os campos e anexe o ficheiro do comprovante.")
+
+with tab_produtividade:
+        st.subheader("📊 Meu Histórico de Produção")
+        logs = db.collection('historico_producao').where('usuario', '==', st.session_state["usuario_atual"]).stream()
+        dados = [doc.to_dict() for doc in logs]
+        
+        if dados:
+            df_prod = pd.DataFrame(dados)
+            df_prod['data'] = pd.to_datetime(df_prod['data'], unit='ms')
+            col1, col2 = st.columns(2)
+            col1.metric("Total de fichas geradas:", len(df_prod))
+            
+            st.write("### 📈 Evolução Mensal")
+            df_prod['mes_ano'] = df_prod['data'].dt.to_period('M').astype(str)
+            st.bar_chart(df_prod.groupby('mes_ano').size())
+            
+            st.write("### 📋 Detalhe Recente")
+            st.dataframe(df_prod[['data', 'titulo_obra']].sort_values(by='data', ascending=False), use_container_width=True)
+        else:
+            st.info("Ainda não há registros de produção.")
