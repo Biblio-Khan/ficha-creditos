@@ -151,7 +151,8 @@ with st.sidebar:
 # ==========================================
 # 🌟 CRIAÇÃO DAS ABAS GLOBAIS
 # ==========================================
-tab_gerador, tab_financeiro = st.tabs(["⚖️ Catalogação em Lote", "💳 Compra e Gestão de Créditos"])
+# A linha correta precisa desempacotar as 3 abas
+tab_gerador, tab_financeiro, tab_produtividade = st.tabs(["⚖️ Gerar Ficha", "💳 Compra e Gestão", "📊 Relatório de Produção"])
 
 # ---------------------------------------------------------
 # ABA 1: GERADOR DE FICHAS (TRABALHO)
